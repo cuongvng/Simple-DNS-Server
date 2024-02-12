@@ -12,7 +12,7 @@ type DNSQuestion struct {
 	CLASS uint16
 }
 
-func (q DNSQuestion) encode(domainName string) []byte {
+func encode(domainName string) []byte {
 	var res = []byte{}
 	var parts = strings.Split(domainName, ".")
 	for _, p := range parts {
@@ -21,13 +21,13 @@ func (q DNSQuestion) encode(domainName string) []byte {
 		var encoded = hex.EncodeToString([]byte(p))
 		res = append(res, []byte(encoded)...)
 	}
-	res = append(res, byte(0))
+	res = append(res, byte(0)) // append a nil byte at last
 	return res
 }
 
 func (q DNSQuestion) serialize() []byte {
 	var res = []byte{}
-	res = append(res, q.encode(q.NAME)...)
+	res = append(res, encode(q.NAME)...)
 	
 	var t = make([]byte, 16)
 	binary.BigEndian.PutUint16(t, q.TYPE)
@@ -36,6 +36,6 @@ func (q DNSQuestion) serialize() []byte {
 
 	res = append(res, t...)
 	res = append(res, c...)
-	
+
 	return res
 }

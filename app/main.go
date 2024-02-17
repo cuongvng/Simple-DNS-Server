@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"encoding/binary"
 )
 
 func main() {	
@@ -30,13 +31,23 @@ func main() {
 	
 		receivedData := string(buf[:size])
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
-	
-		// Create a response with given header
 		
 		var response DNSMessage
+
+		// Parse header
+		var headerId = binary.BigEndian.Uint16(buf[:2])
+		var opcode = uint16((0b01111000 & buf[2]) >> 3)
+		var rd bool = (0b00000001 & buf[3]) & 1 == 1
+		var rcode uint16
+		if opcode == 0 {
+			rcode = 0
+		} else {
+			rcode = 4
+		}
+	
 		response.header = DNSHeader{
-			id: 1234,
-			flags: getFlags(true, 0, false, false, false, false, 0, 0),
+			id: headerId,
+			flags: getFlags(true, opcode, false, false, rd, false, 0, rcode),
 			qdcount: 1,
 			ancount: 1,
 			nscount: 0,

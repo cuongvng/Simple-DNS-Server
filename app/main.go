@@ -34,7 +34,7 @@ func main() {
 		
 		var response DNSMessage
 
-		// Parse header
+		// Parse header: first 12 bytes
 		var headerId = binary.BigEndian.Uint16(buf[:2])
 		var opcode = uint16((0b01111000 & buf[2]) >> 3)
 		var rd bool = (0b00000001 & buf[3]) & 1 == 1
@@ -44,7 +44,6 @@ func main() {
 		} else {
 			rcode = 4
 		}
-	
 		response.header = DNSHeader{
 			id: headerId,
 			flags: getFlags(true, opcode, false, false, rd, false, 0, rcode),
@@ -53,19 +52,36 @@ func main() {
 			nscount: 0,
 			arcount: 0,
 		}
+
+		// Parse question: from the 13th byte
+		// the nil byte marks the end of the label sequence
+		var i = 12
+		for buf[i] != byte(0) {
+			i++
+		}
+		var qLength = i-12
+		var qName = buf[12:12+qLength]
+
 		response.question = DNSQuestion{
-			NAME: "cuongvng.me",
+			NAME: qName,
 			TYPE: 1,
 			CLASS: 1,
 		}
+		
+		// Parse answer
+		i += 1 + 2 + 2 // move over the question section: nil byte (1 bytes), QTYPE (2 bytes), QCLASS (2 bytes)
+		i += qLength + 2 + 2 + 4
+		var rdLength = binary.BigEndian.Uint16(buf[i:i+2])
+		i += 2
+		var rData = binary.BigEndian.Uint32(buf[i:i+4])
 		
 		response.answer = DNSAnswer{
 			NAME: response.question.NAME,
 			TYPE: 1,
 			CLASS: 1,
 			TTL: 60,
-			RDLength: 4,
-			RData: []byte{8,8,8,8},
+			RDLength: rdLength,
+			RData: rData,
 		}
 		
 		_, err = udpConn.WriteToUDP(response.serialize(), source)

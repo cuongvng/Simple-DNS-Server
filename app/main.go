@@ -44,45 +44,72 @@ func main() {
 		} else {
 			rcode = 4
 		}
+
+		var qdcount = binary.BigEndian.Uint16(buf[4:6])
+		var ancount = binary.BigEndian.Uint16(buf[6:8])
+		var nscount = binary.BigEndian.Uint16(buf[8:10])
+		var arcount = binary.BigEndian.Uint16(buf[10:12])
+
 		response.header = DNSHeader{
 			id: headerId,
 			flags: getFlags(true, opcode, false, false, rd, false, 0, rcode),
-			qdcount: 1,
-			ancount: 1,
-			nscount: 0,
-			arcount: 0,
+			qdcount: qdcount,
+			ancount: ancount,
+			nscount: nscount,
+			arcount: arcount,
 		}
 
 		// Parse question: from the 13th byte
-		// the nil byte marks the end of the label sequence
+		
+		var questions []DNSQuestion
 		var i = 12
-		for buf[i] != byte(0) {
-			i++
+		
+		for j:=0; j<int(qdcount); j++ { 
+			var i0 = i
+			for buf[i] != byte(0) { // get NAME, the nil byte marks the end of it
+				i++
+			}
+			// var qLength = i-i0
+			var qName = buf[i0:i]
+			var q = DNSQuestion{
+				NAME: qName,
+				TYPE: 1,
+				CLASS: 1,
+			}
+			questions = append(questions, q)
+			i += 1 + 2 + 2 // move to the next question: nil byte (1 bytes), QTYPE (2 bytes), QCLASS (2 bytes)
 		}
-		var qLength = i-12
-		var qName = buf[12:12+qLength]
 
-		response.question = DNSQuestion{
-			NAME: qName,
-			TYPE: 1,
-			CLASS: 1,
-		}
+		response.question = questions
 		
+
 		// Parse answer
-		i += 1 + 2 + 2 // move over the question section: nil byte (1 bytes), QTYPE (2 bytes), QCLASS (2 bytes)
-		i += qLength + 2 + 2 + 4
-		var rdLength = binary.BigEndian.Uint16(buf[i:i+2])
-		i += 2
-		var rData = binary.BigEndian.Uint32(buf[i:i+4])
-		
-		response.answer = DNSAnswer{
-			NAME: response.question.NAME,
-			TYPE: 1,
-			CLASS: 1,
-			TTL: 60,
-			RDLength: rdLength,
-			RData: rData,
+		var answers []DNSAnswer
+
+		for j:=0; j<int(ancount); j++{
+			var i0 = i
+			for buf[i] != byte(0) { // get NAME, the nil byte marks the end of it
+				i++
+			}
+			var aName = buf[i0:i]
+
+			i += 2 + 2 + 4 // move over TYPE (2 bytes), CLASS(2 bytes) and TTL (4 bytes)
+			var rdLength = binary.BigEndian.Uint16(buf[i:i+2])
+			i += 2
+			var rData = binary.BigEndian.Uint32(buf[i:i+4])
+	
+			var a = DNSAnswer{
+				NAME: aName,
+				TYPE: 1,
+				CLASS: 1,
+				TTL: 60,
+				RDLength: rdLength,
+				RData: rData,
+			}
+			answers = append(answers, a)
 		}
+		
+		response.answer = answers
 		
 		_, err = udpConn.WriteToUDP(response.serialize(), source)
 		if err != nil {
